@@ -1,4 +1,4 @@
-#######7章-共分散構造モデル#######
+#######共分散構造モデル#######
 Dataset <- read.table("sec7_data.csv", header=TRUE, sep=",",na.strings="NA", dec=".", strip.white=TRUE)
 library(sem)
 #相関行列の算定
