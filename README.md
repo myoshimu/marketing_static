@@ -1,1 +1,1 @@
-# marketing_static
+This is dlm demonstration using state space time series analysis.
