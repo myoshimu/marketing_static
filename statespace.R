@@ -1,19 +1,13 @@
-#######状態空間モデル#######
-#読み込みデータsec8_DLM.csvのファイルレイアウト
-#購買日付
-#商品Aの点数PIの対数
-#商品Aの価格掛率の対数
-#商品Bの価格掛率の対数
-#商品Aの山積み陳列実施の有無（1実施0非実施）
-#商品Bの山積み陳列実施の有無（1実施0非実施）
-#
-Dataset <- read.table("sec8_DLM.csv", header=TRUE,sep=",", na.strings="NA", dec=".", strip.white=TRUE)
 library(dlm)
-#フルモデル（モデル1）
-y<-Dataset$LogPI_A
-x<-cbind(Dataset$LogPriceIndex_A,Dataset$LogPriceIndex_B,Dataset$Display_A,Dataset$Display_B)
+
+# Read pos.csv
+# Purchase Date, Logged # of Product A,Logged Price of Product A, B, Campaign flag for Prod A, B(1:Yes, 0:No)
+d <- read.table("pos.csv", header=TRUE,sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+
+# Full model
+y<-d$LogPI_A
+x<-cbind(d$LogPriceIndex_A,d$LogPriceIndex_B,d$Display_A,d$Display_B)
 buildModel <- function(params){
-  #dlmModRegには説明変数を入れる
   mod1 <- dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:6]))
   return(mod1)
 }
@@ -44,8 +38,8 @@ plot(a4,type="l",xlab="days",ylab="beta_3",ylim=c(0.3,1.2))
 plot(a5,type="l",xlab="days",ylab="beta_4",ylim=c(-0.11,0))
 
 #自身の説明変数だけ（モデル2）
-y<-Dataset$LogPI_A
-x<-cbind(Dataset$LogPriceIndex_A,Dataset$Display_A)
+y<-d$LogPI_A
+x<-cbind(d$LogPriceIndex_A,d$Display_A)
 buildModel <- function(params){
   #dlmModRegには説明変数を入れる
   mod2 <- dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:4]))
@@ -60,8 +54,8 @@ exp(outMLE2$par)
 sqrt(diag(avar))
 
 #フルモデル−競合のエンド（モデル3）
-y<-Dataset$LogPI_A
-x<-cbind(Dataset$LogPriceIndex_A,Dataset$LogPriceIndex_B,Dataset$Display_A)
+y<-d$LogPI_A
+x<-cbind(d$LogPriceIndex_A,d$LogPriceIndex_B,d$Display_A)
 buildModel <- function(params){
   #dlmModRegには説明変数を入れる
   mod3 <- dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:5]))
@@ -92,8 +86,8 @@ plot(a3,type="l",xlab="days",ylab="beta_2",ylim=c(0.8,2))
 plot(a4,type="l",xlab="days",ylab="beta_3",ylim=c(0.3,1.2))
 
 #フルモデル−競合価格（モデル4）
-y<-Dataset$LogPI_A
-x<-cbind(Dataset$LogPriceIndex_A,Dataset$Display_A,Dataset$Display_B)
+y<-d$LogPI_A
+x<-cbind(d$LogPriceIndex_A,d$Display_A,d$Display_B)
 buildModel <- function(params){
   #dlmModRegには説明変数を入れる
   mod4 <- dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:5]))
