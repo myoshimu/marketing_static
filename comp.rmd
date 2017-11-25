@@ -1,0 +1,80 @@
+#競合の影響
+
+library(dlm)
+library(dplyr)
+# Create Data
+#query<-read.csv("toyota/daily.csv")
+query<-read.csv("mazda/daily.csv",sep="\t")
+suzuki<-read.csv("suzuki/grp.csv")
+toyota<-read.csv("toyota/grp.csv")
+nissan<-read.csv("nissan/grp.csv")
+mazda<-read.csv("mazda/grp.csv")
+honda<-read.csv("honda/grp.csv")
+# 検索数前処理
+q <- query %>%
+  dplyr::select(StartDate,Queries) %>%
+  dplyr::group_by(date=as.Date(StartDate)) %>%
+  dplyr::summarise(query = sum(Queries))
+
+g <- function(b){
+  s <- paste("grp_brand <- ",b)
+  #文字列を命令として実行する
+  eval(parse(text=s))
+  grp_brand <- grp_brand %>%
+  dplyr::select(date,person) %>%
+  dplyr::group_by(date=as.Date(date)) %>%
+  dplyr::summarise(grp = sum(person))
+  return(grp_brand)
+}
+
+# 視聴数を日別集計
+s<- g("suzuki")
+n<- g("nissan")
+t<- g("toyota")
+m <- g("mazda")
+h <- g("honda")
+colnames(s) <- c("date","s")
+colnames(n) <- c("date","n")
+colnames(t) <- c("date","t")
+colnames(m) <- c("date","m")
+colnames(h) <- c("date","h")
+
+
+d <- dplyr::full_join(q,s,by="date")
+d <- dplyr::full_join(d,n,by="date")
+d <- dplyr::full_join(d,t,by="date")
+d <- dplyr::full_join(d,m,by="date")
+d <- dplyr::full_join(d,h,by="date")
+
+
+d[is.na(d)]<-0
+#3月のデータ削除
+d<-d[-1:-12,]
+y<-log(d$query)
+s<-sqrt(d$s)
+n<-sqrt(d$n)
+t<-sqrt(d$t)
+m<-sqrt(d$m)
+h<-sqrt(d$h)
+x<-cbind(s,n,t,m,h) #1122
+#x<-cbind(s,t) #
+#x<-cbind(s,t,m,h) #
+x<-cbind(t,m,h,n) #1150
+x<-m #1184
+
+#パラメータ数。システムノイズのxごと傾き＋切片＋観測ノイズの分散
+n <- length(x[1,])+2
+build <- function(p){
+  dlmModReg(x,dV = exp(p[1]), dW = exp(p[2:n]))
+}
+fit<-dlmMLE(y,rep(0,n), build,hessian=T)
+-2*fit$value+2*(n+1)
+
+#全部集計してしまう場合(AIC1252)
+x<-sqrt(d$s+d$n+d$t+d$m+d$h)
+build <- function(p){
+  dlmModReg(x,dV = exp(p[1]), dW = exp(p[2:3]))
+}
+fit<-dlmMLE(y,rep(0,3), build,hessian=T)
+-2*fit$value+2*4
+
