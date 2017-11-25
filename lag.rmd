@@ -1,0 +1,103 @@
+---
+title: "Lag Effection2"
+output: html_notebook
+---
+
+### Stockのかわりにラグを入れたモデル
+
+$$
+Model0(切片だけ): y_t = \beta_0+e_t \\
+Model1:  y_t = \beta_0,_t +\beta_1,_tGRP_t+e_t\\
+Model2: y_t = \beta_0,_t+\beta_1,_tGRP_t+\beta_2,_tGRP_{t-1}+e_t \\
+Model3: y_t = \beta_0,_t+\beta_1,_tGRP_t+...\beta_3,_tGRP_{t-2}+e_t \\
+:\\
+Model7: y_t = \beta_0,_t+\beta_1,_tGRP_t+...\beta_7,_tGRP_{t-6}+e_t\\
+e_t\sim N(0,\sigma^2)
+$$
+  
+
+### Modelごとの比較
+
+左端（1-5期）のデータは外す（ストックの時をのぞく）->AICで比較するため全部6日目からみるようにする
+各モデルでAICを計算して一番小さいモデルが妥当とみなす
+
+
+```{r}
+library(dlm)
+library(dplyr)
+query<-read.csv("mazda/daily.csv",sep="\t")
+grp<-read.csv("mazda/grp.csv")
+q <- query %>%
+  dplyr::select(StartDate,Queries) %>%
+  dplyr::group_by(date=as.Date(StartDate)) %>%
+  dplyr::summarise(query = sum(Queries))
+
+# 視聴数にラグ追加
+g<- grp %>%
+  dplyr::select(date,person) %>%
+  dplyr::group_by(date=as.Date(date)) %>%
+  dplyr::summarise(grp = sum(person)) %>%
+  dplyr::mutate(lag1=lag(grp , n=1)) %>%
+  dplyr::mutate(lag2=lag(grp , n=2)) %>%
+  dplyr::mutate(lag3=lag(grp , n=3)) %>%
+  dplyr::mutate(lag4=lag(grp , n=4)) %>%
+  dplyr::mutate(lag5=lag(grp , n=5)) %>%
+  dplyr::mutate(lag6=lag(grp , n=6))
+
+
+
+#視聴率と検索を結合
+d <- dplyr::full_join(q,g,by="date")
+d[is.na(d)]<-0
+#3月の月のデータとラグをラグを考慮ラグを考慮したはじめの7日分削除
+d<-d[-1:-12,]
+y<-log(d$query)
+x0<-sqrt(d$grp)
+x1<-sqrt(d$lag1)
+x2<-sqrt(d$lag2)
+x3<-sqrt(d$lag3)
+x4<-sqrt(d$lag4)
+x5<-sqrt(d$lag5)
+x6<-sqrt(d$lag6)
+vars<-cbind(x0,x1,x2,x3,x4,x5,x6)
+
+#plot(d$grp~d$date, type="l")
+```
+
+
+```{r}
+# Model1: y=β[0]+β[1]GRP[t]+β[2]GRP[t-1]+ε (930)
+model <- function(l) {
+  c<-7:(l+2)
+  if (l==6) { x<-vars } else {x<-vars[,-c]}
+  if (l==0) { n<-3 } else{n <- length(x[1,])+2}
+  build <- function(params){
+    dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:n]))
+  }
+  fit <- dlmMLE(y,rep(0,n),build,hessian=T)
+  -2*fit$value+2*(n+1)
+}
+model(0)
+model(1) #932.6235
+model(2) #906.9541
+model(3) #945.6225
+model(4)
+model(5)
+model(6)
+```
+
+> model(0)
+[1] 1184.945
+> model(1)
+[1] 1160.942
+> model(2)
+[1] 1138.481
+> model(3)
+[1] 1114.215
+> model(4)
+[1] 1089.964
+> model(5)
+[1] 1069.872
+> model(6)
+[1] 1045.8
+
