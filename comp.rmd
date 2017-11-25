@@ -1,5 +1,5 @@
 #競合の影響
-
+```{r}
 library(dlm)
 library(dplyr)
 # Create Data
@@ -78,3 +78,4 @@ build <- function(p){
 fit<-dlmMLE(y,rep(0,3), build,hessian=T)
 -2*fit$value+2*4
 
+```
