@@ -1,0 +1,156 @@
+---
+title: "Lag Effection2"
+output: html_notebook
+---
+
+### Stockのかわりにラグを入れたモデル
+
+$$
+Model0（時変の切片=トレンド＋当期GRP）:  y_t = \beta_0,_t +\beta_1,_tGRP_t+e_t\\
+Model1（一期前）: y_t = \beta_0,_t+\beta_1,_tGRP_t+\beta_2,_tGRP_{t-1}+e_t \\
+Model2: y_t = \beta_0,_t+\beta_1,_tGRP_t+...\beta_3,_tGRP_{t-2}+e_t \\
+:\\
+Model6: y_t = \beta_0,_t+\beta_1,_tGRP_t+...\beta_7,_tGRP_{t-6}+e_t\\
+e_t\sim N(0,\sigma^2)\\
+$$
+  
+
+### Modelごとの比較
+
+左端（1-5期）のデータは外す（ストックの時をのぞく）
+->AICで比較するため全部6日目からみるようにする
+各モデルでAICを計算して一番小さいモデルが妥当とみなす
+
+
+```{r}
+library(dlm)
+library(dplyr)
+q<-read.csv("data/mazda/daily.csv",sep="\t")
+grp<-read.csv("data/mazda/grp.csv")
+q <- q %>%
+  dplyr::select(StartDate,Queries) %>%
+  dplyr::group_by(date=as.Date(StartDate)) %>%
+  dplyr::summarise(query = sum(Queries))
+
+# 視聴数にラグ追加
+g<- grp %>%
+  dplyr::select(date,person) %>%
+  dplyr::group_by(date=as.Date(date)) %>%
+  dplyr::summarise(grp = sum(person)) %>%
+  dplyr::mutate(lag1=lag(grp , n=1)) %>%
+  dplyr::mutate(lag2=lag(grp , n=2)) %>%
+  dplyr::mutate(lag3=lag(grp , n=3)) %>%
+  dplyr::mutate(lag4=lag(grp , n=4)) %>%
+  dplyr::mutate(lag5=lag(grp , n=5)) %>%
+  dplyr::mutate(lag6=lag(grp , n=6))
+
+#視聴率と検索を結合
+d <- dplyr::full_join(q,g,by="date")
+d[is.na(d)]<-0
+#3月のデータとラグをラグを考慮ラグを考慮したはじめの7日分削除
+d<-d[-1:-12,]
+y<-log(d$query)
+x0<-sqrt(d$grp)
+x1<-sqrt(d$lag1)
+x2<-sqrt(d$lag2)
+x3<-sqrt(d$lag3)
+x4<-sqrt(d$lag4)
+x5<-sqrt(d$lag5)
+x6<-sqrt(d$lag6)
+vars<-cbind(x0,x1,x2,x3,x4,x5,x6)
+#plot(d$grp~d$date, type="l")
+```
+
+
+```{r}
+#モデル比較用各種パラメータ
+mcomp <- data.frame(matrix(rep(NA, 4), nrow=1))[numeric(0), ]
+colnames(mcomp) <- c("num", "ll","aic","bic")
+# Model0: y=β[0]+β[1]GRP[t]+ε (930)
+# Model1: y=β[0]+β[1]GRP[t]+β[2]GRP[t-1]+ε (930)
+model <- function(l) {
+  c<-7:(l+2)
+  if (l==6) { x<-vars } else {x<-vars[,-c]}
+  #n=パラメータ数
+  if (l==0) { n<-1 } else{n <- length(x[1,])}
+  build <- function(params){
+    dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:(n+2)]))
+  }
+  
+  fit <- dlmMLE(y,rep(0,(n+2)),build,hessian=T)
+  #cat("対数尤度=",fit$value,"\n")
+  num <-- length(fit$par)
+  aic <-- -2*(fit$value-num)
+  bic<-- -2*fit$value+num*log(length(y))
+  mcomp[l+1,]<<-c(num,fit$value,aic,bic)
+}
+```
+
+```{r}
+model(0)
+model(1) 
+model(2) 
+model(3)
+model(4)
+model(5)
+model(6)
+
+```
+
+```{r}
+l<-6 #best model(l=6)でもっかい推定
+c<-7:8
+x<-vars
+#n=パラメータ数
+n <- length(x[1,])
+build <- function(params){
+  dlmModReg(x, dV = exp(params[1]), dW = exp(params[2:(n+2)]))
+}
+fit <- dlmMLE(y,rep(0,(n+2)),build)
+mod<-build(fit$par)
+filt<-dlmFilter(y,mod) # Apply Kalman Filter
+smooth <- dlmSmooth(filt) # Smoothing
+#filt$m #フィルタリングされた切片？
+intercept<-dropFirst(smooth$s[,1]) #切片
+b0<-dropFirst(smooth$s[,2]) #当期
+b1<-dropFirst(smooth$s[,3]) #1期前
+b2<-dropFirst(smooth$s[,4]) #2期前
+b3<-dropFirst(smooth$s[,5]) #3期前
+b4<-dropFirst(smooth$s[,6]) #4期前
+b5<-dropFirst(smooth$s[,7]) #5期前
+b6<-dropFirst(smooth$s[,8]) #6期前
+est <- intercept+b0*x0+x1*b1+x2*b2+x3*b3+x4*b4+x5*b5+x6*b6
+
+#元プロットと重ねてみる
+leg1<-rgb(0.8,0.5,0.1,alpha=0.6)
+leg2<-rgb(0.70, 0.13, 0.13, alpha=0.8)
+plot(y,type = "l", ylab="", col = leg1, lwd=5)
+lines(est,type="l", ylab="",lty=1, lwd=2, col=leg2)
+legend("topleft",legend=c("Original","Model"),lty=c(1,1),lwd=c(5,2),col=c(leg1,leg2),bg = "transparent")
+
+```
+```{r}
+#平滑化グラフ
+plot(b0,type="l",xlab="days",ylab="beta_0")
+plot(b1,type="l",xlab="days",ylab="beta_1")
+plot(b2,type="l",xlab="days",ylab="beta_2")
+plot(b3,type="l",xlab="days",ylab="beta_3")
+plot(b4,type="l",xlab="days",ylab="beta_4")
+plot(b5,type="l",xlab="days",ylab="beta_5")
+plot(b6,type="l",xlab="days",ylab="beta_6")
+plot(b7,type="l",xlab="days",ylab="beta_7")
+plot(b8,type="l",xlab="days",ylab="beta_8")
+
+```
+
+```{r}
+exp(fit$par)
+diff<-y-est
+shapiro.test(diff)
+Box.test(diff)
+```
+
+exp(fit$par)
+[1] 4.045534e-03 5.123029e-03 1.707546e-11 5.290235e-06 1.307674e-06
+
+e-11は小さすぎる

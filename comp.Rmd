@@ -1,0 +1,161 @@
+---
+title: "Model Test"
+output: html_notebook
+---
+
+#競合の影響
+```{r}
+library(dlm)
+library(dplyr)
+qs<-read.csv("data/qs.txt")
+qn<-read.csv("data/qn.txt")
+qt<-read.csv("data/qt.txt")
+qm<-read.csv("data/qm.txt")
+qh<-read.csv("data/qh.txt")
+s<-read.csv("data/s.txt")
+n<-read.csv("data/n.txt")
+t<-read.csv("data/t.txt")
+m<-read.csv("data/m.txt")
+h<-read.csv("data/h.txt")
+
+#Mazda
+d <- dplyr::full_join(qm,s,by="date")
+d <- dplyr::full_join(d,n,by="date")
+d <- dplyr::full_join(d,t,by="date")
+d <- dplyr::full_join(d,m,by="date")
+d <- dplyr::full_join(d,h,by="date")
+d[is.na(d)]<-0
+#3月のデータ削除
+d<-d[-1:-12,]
+
+par(mfrow=c(2,3)) 
+ccf(h$h,log(qh$query), main="Honda")
+ccf(s$s,log(qs$query), main="Suzuki")
+ccf(t$t,log(qt$query), main="Toyota")
+ccf(n$n,log(qn$query), main="Nissan")
+ccf(m$m,log(qm$query), main="Mazda")
+
+```
+
+
+```{r}
+y<-log(d$query)
+s<-sqrt(d$s)
+n<-sqrt(d$n)
+t<-sqrt(d$t)
+m<-sqrt(d$m)
+h<-sqrt(d$h)
+
+
+#全部集計してしまう場合(AIC1252)
+x<-sqrt(d$s+d$n+d$t+d$m+d$h)
+build <- function(p){
+  dlmModReg(x,dV = exp(p[1]), dW = exp(p[2:3]))
+}
+fit<-dlmMLE(y,rep(0,3), build,hessian=T)
+-2*fit$value+2*4
+
+pred <- function(x){
+  #パラメータ数。システムノイズのxごと傾き＋切片＋観測ノイズの分散
+  if(is.null(nrow(x))) {n=3} else {n <- length(x[1,])+2}
+  build <- function(p){
+    dlmModReg(x,dV = exp(p[1]), dW = exp(p[2:n]))
+  }
+  fit<-dlmMLE(y,rep(0,n), build,hessian=T)
+  return(-2*fit$value+2*(n+1))
+}
+
+
+num <- length(fit.4$par)
+fit$value
+#AIC.パラメータ数=n+観測観測ノイズ+システムノイズ=n+2=length(fit$par)
+aic <- -2*(fit.4$value-num)
+bic<- -2*fit.4$value+num*log(length(y))
+mcomp[5,]<-c(num,fit$value,aic,bic)
+```
+
+```{r}
+sntmh<-cbind(s,n,t,m,h) #1122
+pred(sntmh)
+mtn<-cbind(m,t,n)
+pred(mtn)
+mt<-cbind(m,t)
+pred(mt)
+mnhs<-cbind(m,n,h,s)
+pred(mnhs)
+mnh<-cbind(m,n,h)
+pred(mnh)
+mn<-cbind(m,n)
+pred(mn)
+mhs<-cbind(m,h,s)
+pred(mhs)
+mh<-cbind(m,h)
+pred(mh)
+mthn<-cbind(t,m,h,n) #1150
+pred(mthn)
+x<-m #1184
+```
+<Mazda>
+mtnhs:1123
+mtnh:1146
+mtn:
+mt:
+mnhs:
+mnh:
+mn:
+mhs:
+mh:
+m:1184
+Sum:1221
+
+
+> x<-cbind(m,t,n)
+> pred(x)
+[1] 1168.807
+> x<-cbind(m,t)
+> pred(x)
+[1] 1169.109
+> x<-cbind(m,n,h,s)
+> pred(x)
+[1] 1148.885
+> x<-cbind(m,n,h)
+> pred(x)
+[1] 1173.326
+> x<-cbind(m,n)
+> pred(x)
+[1] 1184.643
+> x<-cbind(m,h,s)
+> pred(x)
+[1] 1149.223
+> x<-cbind(m,h)
+> pred(x)
+[1] 1173.629
+
+```{r}
+#局ごと
+m<-read.csv("data/mazda/grp.csv")
+s<-read.csv("data/suzuki/grp.csv")
+n<-read.csv("data/nissan/grp.csv")
+t<-read.csv("data/toyota/grp.csv")
+h<-read.csv("data/honda/grp.csv")
+g_network <- function(brand) {
+ g<- brand %>%
+  dplyr::select(date,network,person) %>%
+  dplyr::group_by(date=as.Date(date),network) %>%
+  dplyr::summarise(grp = sum(person)) %>%
+  tidyr::spread(key = network, value = grp)
+}
+
+s<-g_network(s)
+h<-g_network(h)
+t<-g_network(t)
+n<-g_network(n)
+m<-g_network(m)
+
+```
+
+```{r}
+#競合を集計
+
+```
+
